@@ -27,7 +27,7 @@ export default function Home() {
       <header className="relative z-50 border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0">
         <nav className="container mx-auto px-6 lg:px-12 py-5 flex justify-between items-center max-w-7xl">
           <div className="flex items-center gap-3">
-            <Image src="/icon.png" alt="Parasync" width={36} height={36} />
+            <Image src="/logo.png" alt="Parasync" width={36} height={36} />
             <span className="text-2xl font-semibold tracking-tight text-blue-600">Parasync</span>
           </div>
           <Link href="/auth/login">
@@ -320,7 +320,7 @@ export default function Home() {
         <div className="container mx-auto px-6 lg:px-12 max-w-7xl py-12">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-3">
-              <Image src="/icon.png" alt="Parasync" width={28} height={28} />
+              <Image src="/logo.png" alt="Parasync" width={28} height={28} />
               <span className="text-lg font-semibold text-blue-600">Parasync</span>
             </div>
             <div className="text-sm text-slate-500">
