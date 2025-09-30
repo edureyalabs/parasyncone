@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import Link from 'next/link'
 
 export default function Home() {
   const [scrollY, setScrollY] = useState(0);
@@ -29,14 +30,16 @@ export default function Home() {
             <Image src="/icon.png" alt="Parasync" width={36} height={36} />
             <span className="text-2xl font-semibold tracking-tight text-blue-600">Parasync</span>
           </div>
-          <button className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-            Login/SignUp
-          </button>
+          <Link href="/auth/login">
+           <button className="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+             Login/SignUp
+           </button>
+           </Link>
         </nav>
       </header>
 
       {/* Hero Section */}
-      <section className="relative container mx-auto px-6 lg:px-12 max-w-7xl pt-32 pb-32">
+      <section className="relative container mx-auto px-6 lg:px-12 max-w-7xl pt-12 pb-32">
         <div className="max-w-5xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-50 text-blue-700 text-sm font-medium mb-10">
             <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
