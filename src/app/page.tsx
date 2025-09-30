@@ -54,19 +54,17 @@ export default function Home() {
             vendor discovery, and pricing—while your team focuses on strategic growth.
           </p>
           
-          <button className="bg-blue-600 text-white px-10 py-4 rounded-lg text-lg font-medium hover:bg-blue-700 transition-colors shadow-sm">
-            Get Started
-          </button>
+
         </div>
 
         {/* Stats Bar */}
         <div className="mt-40 grid grid-cols-3 gap-12 max-w-4xl mx-auto">
           <div className="text-center">
-            <div className="text-4xl font-bold mb-3 text-slate-900">Pay as you go</div>
+            <div className="text-3xl font-bold mb-3 text-slate-900">Pay as you go</div>
             <div className="text-base text-slate-500">Flexible pricing model</div>
           </div>
           <div className="text-center">
-            <div className="text-4xl font-bold mb-3 text-slate-900">24/7</div>
+            <div className="text-2xl font-bold mb-3 text-slate-900">24/7</div>
             <div className="text-base text-slate-500">Autonomous operations</div>
           </div>
           <div className="text-center">
