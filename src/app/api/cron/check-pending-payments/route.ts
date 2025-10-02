@@ -77,8 +77,7 @@ export async function GET(request: Request) {
                 .from('payment_transactions')
                 .update({
                   status: 'success',
-                  razorpay_payment_id: payment.id,
-                  updated_at: new Date().toISOString()
+                  razorpay_payment_id: payment.id
                 })
                 .eq('id', txn.id)
 
@@ -96,8 +95,7 @@ export async function GET(request: Request) {
                 .update({
                   status: 'active',
                   subscription_started_at: now.toISOString(),
-                  subscription_expires_at: expiresAt.toISOString(),
-                  updated_at: now.toISOString()
+                  subscription_expires_at: expiresAt.toISOString()
                 })
                 .eq('id', txn.subscription_id)
 
@@ -112,19 +110,18 @@ export async function GET(request: Request) {
             }
           }
         } else if (order.status === 'attempted') {
-          // Check if order is old enough to mark as failed (older than 30 minutes)
-          const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
+          // Check if order is old enough to mark as failed (older than 10 minutes)
+          const tenMinutesAgo = Date.now() - 10 * 60 * 1000
           const orderCreatedAt = order.created_at * 1000 // Razorpay returns timestamp in seconds
           
-          if (orderCreatedAt < thirtyMinutesAgo) {
+          if (orderCreatedAt < tenMinutesAgo) {
             console.log(`Marking old attempted order as failed: ${order.id}`)
             
             await supabase
               .from('payment_transactions')
               .update({
                 status: 'failed',
-                failure_reason: 'Payment not completed within time limit',
-                updated_at: new Date().toISOString()
+                failure_reason: 'Payment not completed within time limit'
               })
               .eq('id', txn.id)
 
@@ -132,19 +129,18 @@ export async function GET(request: Request) {
             results.push({ orderId: order.id, status: 'updated_to_failed' })
           }
         } else if (order.status === 'created') {
-          // Order created but no payment attempt - check age
-          const oneHourAgo = Date.now() - 60 * 60 * 1000
+          // Order created but no payment attempt - check age (older than 10 minutes)
+          const tenMinutesAgo = Date.now() - 10 * 60 * 1000
           const orderCreatedAt = order.created_at * 1000
           
-          if (orderCreatedAt < oneHourAgo) {
+          if (orderCreatedAt < tenMinutesAgo) {
             console.log(`Marking abandoned order as failed: ${order.id}`)
             
             await supabase
               .from('payment_transactions')
               .update({
                 status: 'failed',
-                failure_reason: 'Payment not attempted',
-                updated_at: new Date().toISOString()
+                failure_reason: 'Payment not attempted'
               })
               .eq('id', txn.id)
 
