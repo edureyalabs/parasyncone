@@ -25,10 +25,30 @@ declare module 'razorpay' {
     created_at: number
   }
 
+  interface RazorpayPayment {
+    id: string
+    entity: string
+    amount: number
+    currency: string
+    status: string
+    order_id: string
+    method: string
+    captured: boolean
+    created_at: number
+  }
+
+  interface RazorpayPaymentList {
+    entity: string
+    count: number
+    items: RazorpayPayment[]
+  }
+
   class Razorpay {
     constructor(options: RazorpayOptions)
     orders: {
       create(options: RazorpayOrderOptions): Promise<RazorpayOrder>
+      fetch(orderId: string): Promise<RazorpayOrder>
+      fetchPayments(orderId: string): Promise<RazorpayPaymentList>
     }
   }
 

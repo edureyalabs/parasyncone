@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface Subscription {
@@ -30,6 +30,9 @@ interface SubscriptionCardProps {
 export default function SubscriptionCard({ agent, orgId, highlightAgent }: SubscriptionCardProps) {
   const [loading, setLoading] = useState(false)
   const [razorpayLoaded, setRazorpayLoaded] = useState(false)
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null)
+  const [pollingMessage, setPollingMessage] = useState<string>('')
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const router = useRouter()
   const subscription = agent.subscriptions?.[0]
 
@@ -39,11 +42,19 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
       if (typeof window !== 'undefined' && (window as any).Razorpay) {
         setRazorpayLoaded(true)
       } else {
-        // Retry after 100ms
         setTimeout(checkRazorpay, 100)
       }
     }
     checkRazorpay()
+  }, [])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+      }
+    }
   }, [])
 
   const typeConfig = {
@@ -80,6 +91,53 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
     return { text: 'Expired', color: 'text-red-600', canActivate: false, isExpired: true }
   }
 
+  // Poll payment status
+  const startPollingPaymentStatus = (orderId: string) => {
+    setPendingOrderId(orderId)
+    setPollingMessage('Checking payment status...')
+    
+    let attempts = 0
+    const maxAttempts = 60 // Poll for 5 minutes (every 5 seconds)
+    
+    pollIntervalRef.current = setInterval(async () => {
+      attempts++
+      
+      try {
+        const response = await fetch('/api/razorpay/check-payment-status', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ orderId })
+        })
+
+        const result = await response.json()
+
+        if (result.status === 'success') {
+          // Payment successful
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+          router.push(`/organizations/${orgId}/billing/payment-success?paymentId=${result.paymentId}&agentId=${result.agentId}`)
+        } else if (result.status === 'failed') {
+          // Payment failed
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+          router.push(`/organizations/${orgId}/billing/payment-failure?reason=payment_failed`)
+        } else if (attempts >= maxAttempts) {
+          // Timeout
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current)
+          setPollingMessage('Payment status unclear. Please contact support or check back later.')
+          setLoading(false)
+        } else {
+          setPollingMessage(`Still checking... (${attempts}/${maxAttempts})`)
+        }
+      } catch (error) {
+        console.error('Polling error:', error)
+        if (attempts >= maxAttempts && pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current)
+          setPollingMessage('Failed to verify payment. Please contact support.')
+          setLoading(false)
+        }
+      }
+    }, 5000) // Check every 5 seconds
+  }
+
   const handleActivateTrial = async () => {
     setLoading(true)
     
@@ -93,10 +151,6 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
       const result = await response.json()
 
       if (result.success) {
-        // Show success message
-        alert('Free trial activated successfully! Valid for 30 days.')
-        
-        // Use Next.js router instead of window.location
         router.push(`/organizations/${orgId}/agents/${agent.id}`)
         router.refresh()
       } else {
@@ -124,7 +178,7 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
     setLoading(true)
     
     try {
-      // Step 1: Create Razorpay order
+      // Create Razorpay order
       const response = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -142,14 +196,13 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
 
       const { orderId, amount, currency } = data
 
-      // Step 2: Get Razorpay key from window (set by layout script)
       const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID
 
       if (!razorpayKey) {
         throw new Error('Payment configuration error. Please contact support.')
       }
 
-      // Step 3: Initialize Razorpay checkout
+      // Initialize Razorpay checkout
       const options = {
         key: razorpayKey,
         amount: amount,
@@ -158,7 +211,7 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
         description: `${agent.type} Agent - 30 Days Subscription`,
         order_id: orderId,
         handler: async function (response: any) {
-          // Payment successful - verify on backend
+          // Payment successful - verify immediately
           try {
             const verifyResponse = await fetch('/api/razorpay/verify-payment', {
               method: 'POST',
@@ -175,15 +228,15 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
             const result = await verifyResponse.json()
 
             if (result.success) {
-              // Redirect to success page
               router.push(`/organizations/${orgId}/billing/payment-success?paymentId=${response.razorpay_payment_id}&agentId=${agent.id}`)
             } else {
-              // Redirect to failure page
-              router.push(`/organizations/${orgId}/billing/payment-failure?reason=verification_failed&paymentId=${response.razorpay_payment_id}`)
+              // Start polling as backup
+              startPollingPaymentStatus(orderId)
             }
           } catch (error) {
             console.error('Verification error:', error)
-            router.push(`/organizations/${orgId}/billing/payment-failure?reason=verification_error`)
+            // Start polling as backup
+            startPollingPaymentStatus(orderId)
           }
         },
         prefill: {
@@ -194,14 +247,15 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
         },
         modal: {
           ondismiss: function() {
-            setLoading(false)
+            // User closed modal - check if payment was made
+            setPollingMessage('Checking if payment was completed...')
+            startPollingPaymentStatus(orderId)
           }
         }
       }
 
       const razorpay = new (window as any).Razorpay(options)
       
-      // Handle payment failures
       razorpay.on('payment.failed', function (response: any) {
         setLoading(false)
         router.push(`/organizations/${orgId}/billing/payment-failure?reason=${encodeURIComponent(response.error.description || 'Payment failed')}`)
@@ -232,6 +286,12 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
           <p className={`text-sm font-medium ${status.color}`}>{status.text}</p>
         </div>
       </div>
+
+      {pollingMessage && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <p className="text-sm text-blue-700">{pollingMessage}</p>
+        </div>
+      )}
 
       <div className="space-y-4">
         <div className="flex items-baseline justify-between">
