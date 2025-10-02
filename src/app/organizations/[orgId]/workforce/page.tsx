@@ -4,7 +4,7 @@ import Link from 'next/link'
 import CreateAgentButton from '@/components/CreateAgentButton'
 import AgentCard from '@/components/AgentCard'
 
-export default async function WorkforcePage({ params }: { params: { orgId: string } }) {
+export default async function WorkforcePage({ params }: { params: Promise<{ orgId: string }> }) {
   const supabase = await createClient()
   
   const { data: { user } } = await supabase.auth.getUser()
@@ -13,11 +13,14 @@ export default async function WorkforcePage({ params }: { params: { orgId: strin
     redirect('/auth/login')
   }
 
+  // Await params
+  const { orgId } = await params
+
   // Verify organization belongs to user
   const { data: organization } = await supabase
     .from('organizations')
     .select('*')
-    .eq('id', params.orgId)
+    .eq('id', orgId)
     .eq('user_id', user.id)
     .single()
 
@@ -25,11 +28,11 @@ export default async function WorkforcePage({ params }: { params: { orgId: strin
     redirect('/organizations')
   }
 
-  // Fetch agents for this organization
+  // Fetch agents only (no subscription join)
   const { data: agents } = await supabase
     .from('agents')
     .select('*')
-    .eq('org_id', params.orgId)
+    .eq('org_id', orgId)
     .order('created_at', { ascending: true })
 
   const salesAgent = agents?.find(agent => agent.type === 'SALES')
@@ -56,6 +59,14 @@ export default async function WorkforcePage({ params }: { params: { orgId: strin
                 <p className="text-sm text-gray-500">Workforce Management</p>
               </div>
             </div>
+            {agents && agents.length > 0 && (
+              <Link 
+                href={`/organizations/${orgId}/billing`}
+                className="text-blue-600 hover:text-blue-700 font-medium text-sm"
+              >
+                Manage Billing →
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -67,14 +78,14 @@ export default async function WorkforcePage({ params }: { params: { orgId: strin
             <h2 className="text-3xl font-bold text-gray-900 mb-2">Your AI Agents</h2>
             <p className="text-gray-600">
               {allAgentsCreated 
-                ? 'All agents created. Manage your workforce below.' 
+                ? 'Manage your AI workforce and subscriptions' 
                 : 'Create your Sales and Procurement agents to get started'}
             </p>
           </div>
           
           {!allAgentsCreated && (
             <CreateAgentButton 
-              orgId={params.orgId} 
+              orgId={orgId} 
               hasSales={!!salesAgent}
               hasProcurement={!!procurementAgent}
             />
@@ -85,7 +96,7 @@ export default async function WorkforcePage({ params }: { params: { orgId: strin
         {agents && agents.length > 0 ? (
           <div className="grid md:grid-cols-2 gap-6">
             {agents.map((agent) => (
-              <AgentCard key={agent.id} agent={agent} />
+              <AgentCard key={agent.id} agent={agent} orgId={orgId} />
             ))}
           </div>
         ) : (

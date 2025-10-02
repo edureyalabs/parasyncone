@@ -1,3 +1,7 @@
+'use client'
+
+import Link from 'next/link'
+
 interface Agent {
   id: string
   name: string
@@ -9,9 +13,10 @@ interface Agent {
 
 interface AgentCardProps {
   agent: Agent
+  orgId: string
 }
 
-export default function AgentCard({ agent }: AgentCardProps) {
+export default function AgentCard({ agent, orgId }: AgentCardProps) {
   const typeConfig = {
     SALES: {
       icon: '💼',
@@ -50,12 +55,21 @@ export default function AgentCard({ agent }: AgentCardProps) {
               {agent.type}
             </span>
           </div>
-          <p className="text-gray-600 text-sm leading-relaxed">{agent.bio}</p>
+          <p className="text-gray-600 text-sm leading-relaxed mb-4">{agent.bio}</p>
           
-          <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
             <p className="text-xs text-gray-500">
               Created {new Date(agent.created_at).toLocaleDateString()}
             </p>
+            <Link
+              href={`/organizations/${orgId}/agents/${agent.id}`}
+              className="text-blue-600 hover:text-blue-700 font-medium text-sm flex items-center gap-1"
+            >
+              Open Console
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
           </div>
         </div>
       </div>
