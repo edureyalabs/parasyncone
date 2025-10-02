@@ -19,7 +19,6 @@ export default async function BillingPage({
     redirect('/auth/login')
   }
 
-  // Await params and searchParams
   const { orgId } = await params
   const { agent: highlightAgent } = await searchParams
 
@@ -35,15 +34,31 @@ export default async function BillingPage({
     redirect('/organizations')
   }
 
-  // Fetch agents with subscriptions (left join)
+  // Fetch agents first
   const { data: agents } = await supabase
     .from('agents')
-    .select(`
-      *,
-      subscriptions (*)
-    `)
+    .select('*')
     .eq('org_id', orgId)
     .order('created_at', { ascending: true })
+
+  // Fetch subscriptions for each agent
+  let agentsWithSubscriptions = []
+  if (agents && agents.length > 0) {
+    agentsWithSubscriptions = await Promise.all(
+      agents.map(async (agent) => {
+        const { data: subscriptions } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('agent_id', agent.id)
+          .order('created_at', { ascending: false })
+        
+        return {
+          ...agent,
+          subscriptions: subscriptions || []
+        }
+      })
+    )
+  }
 
   // Fetch payment transactions
   const agentIds = agents?.map(a => a.id) || []
@@ -91,7 +106,7 @@ export default async function BillingPage({
         <div className="mb-12">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">Agent Subscriptions</h2>
           <div className="grid md:grid-cols-2 gap-6">
-            {agents?.map((agent) => (
+            {agentsWithSubscriptions?.map((agent) => (
               <SubscriptionCard 
                 key={agent.id}
                 agent={agent}

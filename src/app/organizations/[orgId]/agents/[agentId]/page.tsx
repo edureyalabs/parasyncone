@@ -17,27 +17,31 @@ export default async function AgentConsolePage({
     redirect('/auth/login')
   }
 
-  // Await params
   const { orgId, agentId } = await params
 
-  // Verify agent access
-  const { data: agent } = await supabase
+  // Fetch agent first
+  const { data: agent, error: agentError } = await supabase
     .from('agents')
     .select(`
       *,
-      organizations!inner(user_id),
-      subscriptions(*)
+      organizations!inner(user_id)
     `)
     .eq('id', agentId)
     .eq('org_id', orgId)
     .single()
 
-  if (!agent || agent.organizations.user_id !== user.id) {
+  if (agentError || !agent || agent.organizations.user_id !== user.id) {
     redirect(`/organizations/${orgId}/workforce`)
   }
 
-  // Check subscription status
-  const subscription = agent.subscriptions?.[0]
+  // Fetch subscription separately
+  const { data: subscriptions } = await supabase
+    .from('subscriptions')
+    .select('*')
+    .eq('agent_id', agentId)
+    .order('created_at', { ascending: false })
+
+  const subscription = subscriptions?.[0]
   
   if (!subscription) {
     redirect(`/organizations/${orgId}/billing?agent=${agentId}`)

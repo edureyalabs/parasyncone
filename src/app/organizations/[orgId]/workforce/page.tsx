@@ -13,7 +13,6 @@ export default async function WorkforcePage({ params }: { params: Promise<{ orgI
     redirect('/auth/login')
   }
 
-  // Await params
   const { orgId } = await params
 
   // Verify organization belongs to user
@@ -28,15 +27,38 @@ export default async function WorkforcePage({ params }: { params: Promise<{ orgI
     redirect('/organizations')
   }
 
-  // Fetch agents only (no subscription join)
-  const { data: agents } = await supabase
+  // Fetch agents first
+  const { data: agents, error: agentsError } = await supabase
     .from('agents')
     .select('*')
     .eq('org_id', orgId)
     .order('created_at', { ascending: true })
 
-  const salesAgent = agents?.find(agent => agent.type === 'SALES')
-  const procurementAgent = agents?.find(agent => agent.type === 'PROCUREMENT')
+  if (agentsError) {
+    console.error('Error fetching agents:', agentsError)
+  }
+
+  // Fetch subscriptions separately for each agent
+  let agentsWithSubscriptions = []
+  if (agents && agents.length > 0) {
+    agentsWithSubscriptions = await Promise.all(
+      agents.map(async (agent) => {
+        const { data: subscriptions } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('agent_id', agent.id)
+          .order('created_at', { ascending: false })
+        
+        return {
+          ...agent,
+          subscriptions: subscriptions || []
+        }
+      })
+    )
+  }
+
+  const salesAgent = agentsWithSubscriptions?.find(agent => agent.type === 'SALES')
+  const procurementAgent = agentsWithSubscriptions?.find(agent => agent.type === 'PROCUREMENT')
   const allAgentsCreated = salesAgent && procurementAgent
 
   return (
@@ -59,7 +81,7 @@ export default async function WorkforcePage({ params }: { params: Promise<{ orgI
                 <p className="text-sm text-gray-500">Workforce Management</p>
               </div>
             </div>
-            {agents && agents.length > 0 && (
+            {agentsWithSubscriptions && agentsWithSubscriptions.length > 0 && (
               <Link 
                 href={`/organizations/${orgId}/billing`}
                 className="text-blue-600 hover:text-blue-700 font-medium text-sm"
@@ -93,9 +115,9 @@ export default async function WorkforcePage({ params }: { params: Promise<{ orgI
         </div>
 
         {/* Agents Grid */}
-        {agents && agents.length > 0 ? (
+        {agentsWithSubscriptions && agentsWithSubscriptions.length > 0 ? (
           <div className="grid md:grid-cols-2 gap-6">
-            {agents.map((agent) => (
+            {agentsWithSubscriptions.map((agent) => (
               <AgentCard key={agent.id} agent={agent} orgId={orgId} />
             ))}
           </div>

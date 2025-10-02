@@ -81,8 +81,8 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
       if (result.success) {
         alert('Free trial activated successfully! Valid for 30 days.')
         
-        // Force a full page reload to refresh data
-        window.location.href = `/organizations/${orgId}/billing`
+        // Force page reload to show updated subscription
+        window.location.href = `/organizations/${orgId}/workforce`
       } else {
         alert(result.error || 'Failed to activate trial')
         setLoading(false)
