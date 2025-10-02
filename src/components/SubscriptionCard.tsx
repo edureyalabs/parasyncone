@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 interface Subscription {
@@ -29,8 +29,22 @@ interface SubscriptionCardProps {
 
 export default function SubscriptionCard({ agent, orgId, highlightAgent }: SubscriptionCardProps) {
   const [loading, setLoading] = useState(false)
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false)
   const router = useRouter()
   const subscription = agent.subscriptions?.[0]
+
+  // Check if Razorpay script is loaded
+  useEffect(() => {
+    const checkRazorpay = () => {
+      if (typeof window !== 'undefined' && (window as any).Razorpay) {
+        setRazorpayLoaded(true)
+      } else {
+        // Retry after 100ms
+        setTimeout(checkRazorpay, 100)
+      }
+    }
+    checkRazorpay()
+  }, [])
 
   const typeConfig = {
     SALES: { icon: '💼', color: 'text-green-700', bg: 'bg-green-50' },
@@ -79,10 +93,12 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
       const result = await response.json()
 
       if (result.success) {
+        // Show success message
         alert('Free trial activated successfully! Valid for 30 days.')
         
-        // Force page reload to show updated subscription
-        window.location.href = `/organizations/${orgId}/workforce`
+        // Use Next.js router instead of window.location
+        router.push(`/organizations/${orgId}/agents/${agent.id}`)
+        router.refresh()
       } else {
         alert(result.error || 'Failed to activate trial')
         setLoading(false)
@@ -100,10 +116,15 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
       return
     }
 
+    if (!razorpayLoaded) {
+      alert('Payment system is loading. Please try again in a moment.')
+      return
+    }
+
     setLoading(true)
     
     try {
-      // Create Razorpay order
+      // Step 1: Create Razorpay order
       const response = await fetch('/api/razorpay/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,38 +142,48 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
 
       const { orderId, amount, currency } = data
 
-      // Initialize Razorpay
+      // Step 2: Get Razorpay key from window (set by layout script)
+      const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID
+
+      if (!razorpayKey) {
+        throw new Error('Payment configuration error. Please contact support.')
+      }
+
+      // Step 3: Initialize Razorpay checkout
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+        key: razorpayKey,
         amount: amount,
         currency: currency,
         name: 'Parasync One',
         description: `${agent.type} Agent - 30 Days Subscription`,
         order_id: orderId,
         handler: async function (response: any) {
-          setLoading(true)
-          
-          // Verify payment
-          const verifyResponse = await fetch('/api/razorpay/verify-payment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature,
-              agentId: agent.id,
-              subscriptionId: subscription.id
+          // Payment successful - verify on backend
+          try {
+            const verifyResponse = await fetch('/api/razorpay/verify-payment', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                agentId: agent.id,
+                subscriptionId: subscription.id
+              })
             })
-          })
 
-          const result = await verifyResponse.json()
+            const result = await verifyResponse.json()
 
-          if (result.success) {
-            alert('Payment successful! Your subscription is now active for 30 days.')
-            window.location.href = `/organizations/${orgId}/billing`
-          } else {
-            alert('Payment verification failed. Please contact support with your payment ID: ' + response.razorpay_payment_id)
-            setLoading(false)
+            if (result.success) {
+              // Redirect to success page
+              router.push(`/organizations/${orgId}/billing/payment-success?paymentId=${response.razorpay_payment_id}&agentId=${agent.id}`)
+            } else {
+              // Redirect to failure page
+              router.push(`/organizations/${orgId}/billing/payment-failure?reason=verification_failed&paymentId=${response.razorpay_payment_id}`)
+            }
+          } catch (error) {
+            console.error('Verification error:', error)
+            router.push(`/organizations/${orgId}/billing/payment-failure?reason=verification_error`)
           }
         },
         prefill: {
@@ -169,15 +200,18 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
       }
 
       const razorpay = new (window as any).Razorpay(options)
+      
+      // Handle payment failures
       razorpay.on('payment.failed', function (response: any) {
         setLoading(false)
-        alert('Payment failed: ' + response.error.description)
+        router.push(`/organizations/${orgId}/billing/payment-failure?reason=${encodeURIComponent(response.error.description || 'Payment failed')}`)
       })
       
       razorpay.open()
+      
     } catch (error) {
       console.error('Payment error:', error)
-      alert('Failed to initiate payment. Please try again.')
+      alert(error instanceof Error ? error.message : 'Failed to initiate payment. Please try again.')
       setLoading(false)
     }
   }
@@ -185,7 +219,7 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
   const status = getStatus()
 
   return (
-    <div className={`bg-white rounded-lg border-2 p-6 ${isHighlighted ? 'border-blue-500 shadow-lg' : 'border-gray-200'}`}>
+    <div className={`bg-white rounded-lg border-2 p-6 transition-all ${isHighlighted ? 'border-blue-500 shadow-lg' : 'border-gray-200'}`}>
       <div className="flex items-start gap-4 mb-6">
         <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
           <img src={agent.avatar_url} alt={agent.name} className="w-full h-full object-cover" />
@@ -221,10 +255,19 @@ export default function SubscriptionCard({ agent, orgId, highlightAgent }: Subsc
         {subscription && status.isExpired && (
           <button
             onClick={handleSubscribe}
-            disabled={loading}
+            disabled={loading || !razorpayLoaded}
             className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {loading ? 'Processing...' : 'Subscribe Now - ₹800'}
+            {loading ? 'Processing...' : razorpayLoaded ? 'Subscribe Now - ₹800' : 'Loading Payment...'}
+          </button>
+        )}
+
+        {subscription && !status.isExpired && !status.canActivate && (
+          <button
+            onClick={() => router.push(`/organizations/${orgId}/agents/${agent.id}`)}
+            className="w-full bg-green-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-green-700 transition-colors"
+          >
+            Access Agent Console
           </button>
         )}
       </div>
